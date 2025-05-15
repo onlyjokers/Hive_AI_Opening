@@ -1,16 +1,33 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+
   export let text: string;
   export let initialX: number;
   export let initialY: number;
   export let width: number = 100;
   export let height: number = 100;
   export let rotation: number = 0;
+  export let id: string;
 
+  const dispatch = createEventDispatcher();
   let isDragging = false;
   let startX: number;
   let startY: number;
   let x = initialX;
   let y = initialY;
+  
+  // 计算中心点位置
+  $: centerX = x + width / 2;
+  $: centerY = y + height / 2;
+  
+  // 当位置改变时发送事件
+  $: {
+    dispatch('move', {
+      id,
+      x: centerX,
+      y: centerY
+    });
+  }
 
   function handleMouseDown(event: MouseEvent) {
     isDragging = true;
