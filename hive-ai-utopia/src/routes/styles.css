@@ -1,0 +1,42 @@
+/* 蜂巢AI理想国网站样式 */
+
+@font-face {
+  font-family: 'SimHei';
+  src: local('SimHei');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'SimSun';
+  src: local('SimSun');
+  font-weight: normal;
+  font-style: normal;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #fafafa;
+  font-family: "SimSun", "宋体", serif;
+  color: #000;
+  overflow-x: hidden;
+}
+
+.code-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  opacity: 0.2;
+  pointer-events: none;
+  color: #cccccc;
+  font-family: monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 20px;
+  overflow: hidden;
+  white-space: pre;
+}
