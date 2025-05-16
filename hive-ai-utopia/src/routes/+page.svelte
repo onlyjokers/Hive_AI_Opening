@@ -110,47 +110,41 @@ import { fade } from 'svelte/transition';
     "    constructor() {",
     "    }",
     "  }",
-    "  return 和谐;",
     "  共生 += random(-0.1, 0.1);",
-    "}",
-    "共生 += random(-0.1, 0.1);",
-    "class 生态系统 {",
-    "  共生 += random(-0.1, 0.1);",
-    "  this.共生 = 0.5;",
+    "  对抗 += random(-0.1, 0.1);",
     "  let 平衡 = 共生 * 对抗;",
-    "  constructor() {",
-    "    关系.push(new 关系模型());",
-    "  }",
-    "  for (let i = 0; i < 3; i++) {",
-    "    对抗 += random(-0.1, 0.1);",
-    "  }",
-    "  function 对抗与共生() {",
-    "    class 生态系统 {",
-    "      关系.push(new 关系模型());",
-    "    }",
-    "  }",
-    "  function 更新状态() {",
-    "    this.共生 = 0.5;",
-    "    return 和谐;",
-    "    constructor() {",
-    "    }",
-    "  }",
+    "  let 和谐 = 平衡 * random(0.5, 1.5);",
+    "  let 关系 = [];",
+    "  let 对抗 = 0;",
+    "  let 和谐 = 0;",
     "  return 和谐;",
-    "  共生 += random(-0.1, 0.1);",
-    "}"
+    "}",
   ]; 
   
   // 构造带动态插入盒子文本的行序列
   // 先将所有 codeLines 转为 code 类型行
   let staticLines: Array<{ type: 'code' | 'box'; id?: string; text: string }> = codeLines.map(text => ({ type: 'code', text }));
-  // 随机将 boxes 插入到 staticLines 中
-  boxes.forEach(b => {
-    const idx = Math.floor(Math.random() * (staticLines.length + 1));
-    staticLines.splice(idx, 0, { type: 'box', id: b.id, text: b.text });
-  });
-  // 为确保足够滚动内容，可在前后各加 10 行空白注释
-  const padLines = Array(10).fill({ type: 'code', text: '' });
+  // 为确保足够滚动内容，在前后各加 padCount 行空白注释
+  const padCount = 20;
+  const padLines = Array(padCount).fill({ type: 'code', text: '' });
   staticLines = [...padLines, ...staticLines, ...padLines];
+  // 按要求：第一个插入在 padCount+1 行，最后一个插入在倒数 padCount+1 前，其余随机递增
+  // 第一个盒子固定位置
+  const firstIdx = padCount + 1;
+  staticLines.splice(firstIdx, 0, { type: 'box', id: boxes[0].id, text: boxes[0].text });
+  // 最后一个盒子固定位置
+  const lastIdx = staticLines.length - padCount - 1;
+  staticLines.splice(lastIdx, 0, { type: 'box', id: boxes[boxes.length - 1].id, text: boxes[boxes.length - 1].text });
+  // 中间盒子随机插入，保持顺序递增
+  let prevIdx = firstIdx + 1;
+  for (let i = 1; i < boxes.length - 1; i++) {
+    const b = boxes[i];
+    const remaining = (boxes.length - 1) - i;
+    const maxIdx = staticLines.length - padCount - remaining + 1;
+    const idx = prevIdx + Math.floor(Math.random() * (maxIdx - prevIdx + 1));
+    staticLines.splice(idx, 0, { type: 'box', id: b.id, text: b.text });
+    prevIdx = idx + 1;
+  }
 
   let codeDiv: HTMLDivElement;
   let linesContainer: HTMLDivElement;
@@ -158,10 +152,13 @@ import { fade } from 'svelte/transition';
   let lineRefs: Array<HTMLDivElement> = Array(staticLines.length);
   // 记录每个盒子的显示状态与初始位置
   let boxStates = {} as Record<string, { visible: boolean; initialX: number; initialY: number }>;
+  // 标记每个盒子是否已启动显示延时，避免重复计时
+  let boxScheduled = {} as Record<string, boolean>;
   for (const b of boxes) {
     boxStates[b.id] = { visible: false, initialX: 0, initialY: 0 };
+    boxScheduled[b.id] = false;
   }
-  
+
   onMount(() => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
@@ -173,8 +170,9 @@ import { fade } from 'svelte/transition';
         { y: viewH },
         {
           // 滚动到内容底部与视口底对齐时停止：y = viewH - fullH
-          y: viewH - fullH,
-          duration: 30,
+          // y: viewH - fullH,
+          y: viewH/1.1 - fullH,
+          duration: 5,
           ease: 'none',
           onUpdate: () => {
             // 检测视口区域
@@ -182,21 +180,17 @@ import { fade } from 'svelte/transition';
             
             // 遍历检测所有盒子类型行
             staticLines.forEach((line, idx) => {
-              if (line.type === 'box' && !boxStates[line.id].visible) {
+              if (line.type === 'box' && !boxStates[line.id].visible && !boxScheduled[line.id]) {
                 const lineEl = lineRefs[idx];
                 if (lineEl) {
                   const lineRect = lineEl.getBoundingClientRect();
                   
                   // 当行进入视口后才触发显示
-                  if (lineRect.top >= viewportRect.top && 
-                      lineRect.bottom <= viewportRect.bottom && 
-                      lineRect.top <= viewportRect.bottom) {
-                    
-                    // 行完全进入视口后，等待2-6秒的随机时间
-                    const delay = 2000 + Math.random() * 4000; // 2-6秒
-                    
+                  if (lineRect.top >= viewportRect.top && lineRect.bottom <= viewportRect.bottom) {
+                    // 仅触发一次
+                    boxScheduled[line.id] = true;
+                    const delay = 1500 + Math.random() * 2000;
                     setTimeout(() => {
-                      // 重新获取当前位置，确保使用最新位置
                       const pos = lineEl.getBoundingClientRect();
                       boxStates[line.id] = {
                         visible: true,
