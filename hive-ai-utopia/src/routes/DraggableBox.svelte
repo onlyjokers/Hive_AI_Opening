@@ -2,8 +2,8 @@
   import { createEventDispatcher } from 'svelte';
 
   export let text: string;
-  export let initialX: number;
-  export let initialY: number;
+export let initialX: number = 0;
+export let initialY: number = 0;
   // 自动测量宽高，不再由外部传入
   let boxDiv: HTMLDivElement;
   let width: number = 0;

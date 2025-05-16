@@ -6,18 +6,24 @@
 
   let windowWidth = 0;
   let windowHeight = 0;
+  let animationDone = false;
 
-  // 定义可拖拽框的配置数组，支持动态增删
+  // 定义可拖拽框的配置数组，仅包含 id/text/rotation
   const boxes = [
-    { id: 'shengsheng', text: '共生', initialX: 150, initialY: 450, rotation: 0 },
-    { id: 'duikang',   text: '对抗', initialX: 500, initialY: 200, rotation: 0 },
-    { id: 'yu',        text: '与',   initialX: 350, initialY: 400, rotation: 0 },
-    { id: 'ni',        text: '你',   initialX: 30,  initialY: 400, rotation: 0 }
+    { id: 'works', text: '██落在夜空生成以前', rotation: 0 },
+    { id: 'name', text: '蔡宇潇  Justin Bortnick', rotation: 0 },
+    { id: 'type', text: '文学游戏', rotation: 0 },
+    { id: 'time', text: '2024-2025', rotation: 0 },
+    { id: 'duration', text: '时长不限', rotation: 0 }
   ];
+
+  // 盒子状态对象会在后面初始化
+
   // 存储每个框的最新状态，用于计算包裹轮廓，默认尺寸为0
+  // 存储每个框的最新状态，用于计算包裹轮廓，默认全零
   let boxData = {} as Record<string, { x: number; y: number; width: number; height: number; rotation: number }>;
   for (const b of boxes) {
-    boxData[b.id] = { x: b.initialX, y: b.initialY, width: 0, height: 0, rotation: b.rotation };
+    boxData[b.id] = { x: 0, y: 0, width: 0, height: 0, rotation: b.rotation };
   }
   // 处理框移动事件，更新boxData
   function handleBoxMove(event) {
@@ -79,12 +85,11 @@
 
   // （保留单一handleBoxMove，已在上方定义）
 
-  // 背景代码
-  const codeSnippets = [
+  // 定义更多丰富的代码行
+  const codeLines = [
     "共生 += random(-0.1, 0.1);",
     "class 生态系统 {",
     "  共生 += random(-0.1, 0.1);",
-    "  this.共生 = 0.5;",
     "  this.共生 = 0.5;",
     "  let 平衡 = 共生 * 对抗;",
     "  constructor() {",
@@ -111,7 +116,6 @@
     "class 生态系统 {",
     "  共生 += random(-0.1, 0.1);",
     "  this.共生 = 0.5;",
-    "  this.共生 = 0.5;",
     "  let 平衡 = 共生 * 对抗;",
     "  constructor() {",
     "    关系.push(new 关系模型());",
@@ -133,22 +137,88 @@
     "  return 和谐;",
     "  共生 += random(-0.1, 0.1);",
     "}"
+  ]; 
+  
+  // 构建包含盒子文本的行序列
+  const staticLines: Array<{ type: 'code' | 'box'; id?: string; text: string }> = [
+    ...codeLines.slice(0, 4).map(text => ({ type: 'code', text })),
+    { type: 'box', id: 'works', text: boxes.find(b => b.id==='works').text },
+    ...codeLines.slice(4, 7).map(text => ({ type: 'code', text })),
+    { type: 'box', id: 'name', text: boxes.find(b => b.id==='name').text },
+    ...codeLines.slice(7, 9).map(text => ({ type: 'code', text })),
+    { type: 'box', id: 'type', text: boxes.find(b => b.id==='type').text },
+    ...codeLines.slice(9, 13).map(text => ({ type: 'code', text })),
+    { type: 'box', id: 'time', text: boxes.find(b => b.id==='time').text },
+    ...codeLines.slice(13, 17).map(text => ({ type: 'code', text })),
+    { type: 'box', id: 'duration', text: boxes.find(b => b.id==='duration').text },
+    ...codeLines.slice(17).map(text => ({ type: 'code', text })),
   ];
 
+  // 生成额外的代码行以确保有足够的内容滚动
+  const extraLines = Array(20).fill(0).map((_, i) => 
+    ({ type: 'code', text: `// 额外代码行 ${i+1}` })
+  );
+  
+  // 合并所有行并确保有足够的内容
+  const allLines = [...extraLines, ...staticLines, ...extraLines];
+
   let codeDiv: HTMLDivElement;
+  let linesContainer: HTMLDivElement;
+  // 为每行代码元素准备引用数组
+  let lineRefs: Array<HTMLDivElement> = Array(staticLines.length).fill(null);
+  // 记录每个盒子的显示状态与初始位置
+  let boxStates = {} as Record<string, { visible: boolean; initialX: number; initialY: number }>;
+  for (const b of boxes) {
+    boxStates[b.id] = { visible: false, initialX: 0, initialY: 0 };
+  }
   onMount(() => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
-    // 使用 GSAP 逐行向下滚动代码背景
-    if (codeDiv) {
-      // 从顶部开始
-      codeDiv.scrollTop = 0;
-      gsap.to(codeDiv, {
-        scrollTop: codeDiv.scrollHeight,
-        duration: 30,
-        ease: 'none',
-        repeat: -1
-      });
+    if (codeDiv && linesContainer) {
+      const viewH = codeDiv.clientHeight;
+      const fullH = linesContainer.scrollHeight;
+      gsap.fromTo(
+        linesContainer,
+        { y: viewH },
+        {
+          y: -fullH,
+          duration: 30,
+          ease: 'none',
+          onUpdate: () => {
+            // 检测视口区域
+            const viewportRect = codeDiv.getBoundingClientRect();
+            
+            // 遍历检测所有盒子类型行
+            staticLines.forEach((line, idx) => {
+              if (line.type === 'box' && !boxStates[line.id].visible) {
+                const lineEl = lineRefs[idx];
+                if (lineEl) {
+                  const lineRect = lineEl.getBoundingClientRect();
+                  
+                  // 当行进入视口后才触发显示
+                  if (lineRect.top >= viewportRect.top && 
+                      lineRect.bottom <= viewportRect.bottom && 
+                      lineRect.top <= viewportRect.bottom) {
+                    
+                    // 行完全进入视口后，等待2-6秒的随机时间
+                    const delay = 2000 + Math.random() * 4000; // 2-6秒
+                    
+                    setTimeout(() => {
+                      // 重新获取当前位置，确保使用最新位置
+                      const pos = lineEl.getBoundingClientRect();
+                      boxStates[line.id] = {
+                        visible: true,
+                        initialX: pos.left,
+                        initialY: pos.top
+                      };
+                    }, delay);
+                  }
+                }
+              }
+            });
+          }
+        }
+      );
     }
   });
 </script>
@@ -157,10 +227,16 @@
 
 <!-- 代码背景 -->
 <div bind:this={codeDiv} class="code-background">
-  {#each codeSnippets as snippet}
-    {snippet}
-    <br>
-  {/each}
+  <div bind:this={linesContainer} class="lines-container">
+    {#each staticLines as line, i}
+      <div
+        bind:this={lineRefs[i]}
+        class:selected={line.type === 'box'}
+      >
+        {line.text}
+      </div>
+    {/each}
+  </div>
 </div>
 
 <main>
@@ -170,22 +246,24 @@
     <svg class="triangle-svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
       <path
         d={hullPath}
-        fill="rgba(255,246,160,0.7)"
+        fill="rgba(255, 246, 160, 0.25)"
         stroke="#e0d782"
         stroke-width="1.5"
       />
     </svg>
-    
-    <!-- 可拖拽的框 - 动态渲染所有框 -->
+      
+    <!-- 可拖拽的框 - 根据滚动触发显示 -->
     {#each boxes as b}
-      <DraggableBox
-        id={b.id}
-        text={b.text}
-        initialX={b.initialX}
-        initialY={b.initialY}
-        rotation={b.rotation}
-        on:move={handleBoxMove}
-      />
+      {#if boxStates[b.id].visible}
+        <DraggableBox
+          id={b.id}
+          text={b.text}
+          initialX={boxStates[b.id].initialX}
+          initialY={boxStates[b.id].initialY}
+          rotation={b.rotation}
+          on:move={handleBoxMove}
+        />
+      {/if}
     {/each}
   </div>
 </main>
