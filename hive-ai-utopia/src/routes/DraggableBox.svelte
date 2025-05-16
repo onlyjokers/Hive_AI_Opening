@@ -78,7 +78,7 @@ export let initialY: number = 0;
   .draggable-box {
     position: absolute;
     background-color: #fff6a0;
-    border: 1px solid #e0d782;
+    /* border: 1px solid #e0d782; */
     cursor: move;
     user-select: none;
     display: flex;

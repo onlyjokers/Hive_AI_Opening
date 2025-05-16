@@ -1,16 +1,17 @@
 <script lang="ts">
   import DraggableBox from './DraggableBox.svelte';
   import { onMount } from 'svelte';
-import './styles.css';
+  import './styles.css';
   import { gsap } from 'gsap';
-import { fade } from 'svelte/transition';
+  import { fade } from 'svelte/transition';
+  import { goto } from '$app/navigation';
 
   let windowWidth = 0;
   let windowHeight = 0;
   let animationDone = false;
 
-  // 定义可拖拽框的配置数组，仅包含 id/text/rotation
-  const boxes = [
+  // 定义默认可拖拽框的配置数组
+  const defaultBoxes = [
     { id: 'works', text: '██落在夜空生成以前', rotation: 0 },
     { id: 'name', text: '蔡宇潇  Justin Bortnick', rotation: 0 },
     { id: 'type', text: '文学游戏', rotation: 0 },
@@ -18,14 +19,26 @@ import { fade } from 'svelte/transition';
     { id: 'duration', text: '时长不限', rotation: 0 }
   ];
 
+  // 初始化盒子，将在onMount中尝试从本地存储加载
+  let boxes = [...defaultBoxes];
+
   // 盒子状态对象会在后面初始化
 
   // 存储每个框的最新状态，用于计算包裹轮廓，默认尺寸为0
   // 存储每个框的最新状态，用于计算包裹轮廓，默认全零
   let boxData = {} as Record<string, { x: number; y: number; width: number; height: number; rotation: number }>;
-  for (const b of boxes) {
-    boxData[b.id] = { x: 0, y: 0, width: 0, height: 0, rotation: b.rotation };
+  
+  // 初始化boxData函数，在boxes更新后需要调用
+  function initBoxData() {
+    boxData = {} as Record<string, { x: number; y: number; width: number; height: number; rotation: number }>;
+    for (const b of boxes) {
+      boxData[b.id] = { x: 0, y: 0, width: 0, height: 0, rotation: b.rotation };
+    }
   }
+  
+  // 初始化boxData
+  initBoxData();
+
   // 处理框移动事件，更新boxData
   function handleBoxMove(event) {
     const { id, x, y, width, height, rotation } = event.detail;
@@ -54,7 +67,7 @@ import { fade } from 'svelte/transition';
 
   // 生成SVG路径字符串，仅对已显现的盒子计算凸包
   $: hullPath = (() => {
-    const visibleBoxes = boxes.filter(b => boxStates[b.id].visible);
+    const visibleBoxes = boxes.filter(b => boxStates[b.id]?.visible);
     if (visibleBoxes.length < 2) return '';
     const pts: { x: number; y: number }[] = [];
     for (const b of visibleBoxes) {
@@ -132,9 +145,6 @@ import { fade } from 'svelte/transition';
   // 第一个盒子固定位置
   const firstIdx = padCount + 1;
   staticLines.splice(firstIdx, 0, { type: 'box', id: boxes[0].id, text: boxes[0].text });
-  // 最后一个盒子固定位置
-  const lastIdx = staticLines.length - padCount - 1;
-  staticLines.splice(lastIdx, 0, { type: 'box', id: boxes[boxes.length - 1].id, text: boxes[boxes.length - 1].text });
   // 中间盒子随机插入，保持顺序递增
   let prevIdx = firstIdx + 1;
   for (let i = 1; i < boxes.length - 1; i++) {
@@ -145,6 +155,9 @@ import { fade } from 'svelte/transition';
     staticLines.splice(idx, 0, { type: 'box', id: b.id, text: b.text });
     prevIdx = idx + 1;
   }
+  // 最后一个盒子固定位置，等待所有中间插入完成后计算
+  const lastIdx = staticLines.length - padCount - 1;
+  staticLines.splice(lastIdx, 0, { type: 'box', id: boxes[boxes.length - 1].id, text: boxes[boxes.length - 1].text });
 
   let codeDiv: HTMLDivElement;
   let linesContainer: HTMLDivElement;
@@ -194,6 +207,43 @@ import { fade } from 'svelte/transition';
   }
 
   onMount(() => {
+    // 尝试从本地存储加载自定义盒子数据
+    try {
+      // 首先检查是否有来自 indexer 的文本输入
+      const savedTexts = localStorage.getItem('hive-ai-texts');
+      if (savedTexts) {
+        const texts = savedTexts.split(',').map(text => text.trim()).filter(text => text);
+        if (texts.length > 0) {
+          // 使用自定义文本更新盒子
+          boxes = defaultBoxes.map((box, index) => {
+            return {
+              id: box.id,
+              text: index < texts.length ? texts[index] : box.text,
+              rotation: box.rotation
+            };
+          });
+          // 更新存储的盒子配置
+          localStorage.setItem('hive-ai-boxes', JSON.stringify(boxes));
+          // 重新初始化boxData
+          initBoxData();
+          // 重新构建静态行
+          rebuildStaticLines();
+        }
+      } else {
+        // 检查是否有已保存的完整盒子配置
+        const savedBoxes = localStorage.getItem('hive-ai-boxes');
+        if (savedBoxes) {
+          boxes = JSON.parse(savedBoxes);
+          // 重新初始化boxData
+          initBoxData();
+          // 重新构建静态行
+          rebuildStaticLines();
+        }
+      }
+    } catch (e) {
+      console.error('加载自定义盒子数据时出错:', e);
+    }
+    
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
     if (codeDiv && linesContainer) {
@@ -205,8 +255,8 @@ import { fade } from 'svelte/transition';
         {
           // 滚动到内容底部与视口底对齐时停止：y = viewH - fullH
           // y: viewH - fullH,
-          y: viewH/1.1 - fullH,
-          duration: 10,
+          y: (viewH/1 - 80) - fullH,
+          duration: 8,
           ease: 'none',
           onUpdate: () => {
             // 检测视口区域
@@ -221,21 +271,33 @@ import { fade } from 'svelte/transition';
                   // 当行进入视口后才触发显示
                   if (lineRect.top >= viewportRect.top && lineRect.bottom <= viewportRect.bottom) {
                     // 仅触发一次
-                    if (line.id === lastId) {
-                      // 延迟最后一个盒子的显示，等待其他盒子出现
-                      pendingLast = true;
-                    } else {
-                      boxScheduled[line.id] = true;
-                      const delay = 1500 + Math.random() * 2000;
-                      setTimeout(() => {
+                    boxScheduled[line.id] = true;
+                    const delay = 1500;
+                    setTimeout(() => {
+                      const showBox = () => {
                         const pos = lineEl.getBoundingClientRect();
                         boxStates[line.id] = {
                           visible: true,
                           initialX: pos.left,
                           initialY: pos.top
                         };
-                      }, delay);
-                    }
+                      };
+                      if (line.id === lastId) {
+                        // 等待其它盒子可见后再显示
+                        if (boxes.filter(b => b.id !== lastId).every(b => boxStates[b.id].visible)) {
+                          showBox();
+                        } else {
+                          const checkInterval = setInterval(() => {
+                            if (boxes.filter(b => b.id !== lastId).every(b => boxStates[b.id].visible)) {
+                              showBox();
+                              clearInterval(checkInterval);
+                            }
+                          }, 100);
+                        }
+                      } else {
+                        showBox();
+                      }
+                    }, delay);
                   }
                 }
               }
@@ -318,6 +380,33 @@ import { fade } from 'svelte/transition';
       }, 200);
     }
   }
+
+  // 重新构建包含盒子文本的静态行序列
+  function rebuildStaticLines() {
+    // 重置静态行
+    staticLines = codeLines.map(text => ({ type: 'code', text }));
+    // 添加填充行
+    staticLines = [...padLines, ...staticLines, ...padLines];
+    
+    // 第一个盒子固定位置
+    const firstIdx = padCount + 1;
+    staticLines.splice(firstIdx, 0, { type: 'box', id: boxes[0].id, text: boxes[0].text });
+    
+    // 中间盒子随机插入，保持顺序递增
+    let prevIdx = firstIdx + 1;
+    for (let i = 1; i < boxes.length - 1; i++) {
+      const b = boxes[i];
+      const remaining = (boxes.length - 1) - i;
+      const maxIdx = staticLines.length - padCount - remaining + 1;
+      const idx = prevIdx + Math.floor(Math.random() * (maxIdx - prevIdx + 1));
+      staticLines.splice(idx, 0, { type: 'box', id: b.id, text: b.text });
+      prevIdx = idx + 1;
+    }
+    
+    // 最后一个盒子固定位置
+    const lastIdx = staticLines.length - padCount - 1;
+    staticLines.splice(lastIdx, 0, { type: 'box', id: boxes[boxes.length - 1].id, text: boxes[boxes.length - 1].text });
+  }
 </script>
 
 <svelte:window bind:innerWidth={windowWidth} bind:innerHeight={windowHeight} />
@@ -365,6 +454,9 @@ import { fade } from 'svelte/transition';
       {/if}
     {/each}
   </div>
+  
+  <!-- 返回编辑器按钮 -->
+  <!-- <a href="/indexer" class="edit-button">编辑文本</a> -->
 </main>
 
 <style>
@@ -401,5 +493,25 @@ import { fade } from 'svelte/transition';
   /* 确保DraggableBox可以被拖动 */
   .triangle-container :global(.draggable-box) {
     pointer-events: auto;
+  }
+  
+  /* 编辑按钮样式 */
+  .edit-button {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 8px 16px;
+    background-color: rgba(255, 246, 160, 0.15);
+    color: #e0d782;
+    border: 1px solid #e0d782;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    z-index: 100;
+  }
+  
+  .edit-button:hover {
+    background-color: rgba(255, 246, 160, 0.3);
   }
 </style>
