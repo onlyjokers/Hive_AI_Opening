@@ -16,16 +16,14 @@
   let x = initialX;
   let y = initialY;
   
-  // 计算中心点位置
-  $: centerX = x + width / 2;
-  $: centerY = y + height / 2;
-  
-  // 当位置改变时发送事件
+  // 当位置改变时发送事件，包含左上角坐标及大小
   $: {
     dispatch('move', {
       id,
-      x: centerX,
-      y: centerY
+      x,
+      y,
+      width,
+      height
     });
   }
 

@@ -6,11 +6,11 @@
   let windowWidth = 0;
   let windowHeight = 0;
 
-  // 三个框的位置数据
+  // 三个框的中心点位置数据，初始化为组件的初始位置中心
   let boxPositions = {
-    shengsheng: { center: { x: 0, y: 0 }, edges: null, edgeCenters: null },
-    duikang: { center: { x: 0, y: 0 }, edges: null, edgeCenters: null },
-    yu: { center: { x: 0, y: 0 }, edges: null, edgeCenters: null }
+    shengsheng: { x: 150 + 120 / 2, y: 450 + 100 / 2 },
+    duikang:   { x: 500 + 120 / 2, y: 200 + 100 / 2 },
+    yu:        { x: 350 +  80 / 2, y: 400 +  80 / 2 }
   };
 
   // 更新三角形连线
@@ -23,30 +23,23 @@
       svg.removeChild(svg.firstChild);
     }
 
-    // 检查是否有足够的位置数据来绘制三角形
-    if (!boxPositions.shengsheng?.edges || 
-        !boxPositions.duikang?.edges || 
-        !boxPositions.yu?.edges) {
+    // 检查是否有足够的中心点数据来绘制三角形
+    if (!boxPositions.shengsheng.x || !boxPositions.shengsheng.y ||
+        !boxPositions.duikang.x || !boxPositions.duikang.y ||
+        !boxPositions.yu.x || !boxPositions.yu.y) {
       return;
     }
 
-    // 计算连接点（找到最合适的边缘点以形成三角形）
-    const points = calculateOptimalConnectionPoints();
-    
-    // 创建三角形路径
+    // 使用中心点直接绘制三角形路径
     const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    
-    // 计算路径数据
-    const d = `
-      M ${points.shengsheng.x} ${points.shengsheng.y}
-      L ${points.duikang.x} ${points.duikang.y}
-      L ${points.yu.x} ${points.yu.y}
-      Z
-    `;
+    const d = `M ${boxPositions.shengsheng.x} ${boxPositions.shengsheng.y}
+L ${boxPositions.duikang.x} ${boxPositions.duikang.y}
+L ${boxPositions.yu.x} ${boxPositions.yu.y}
+Z`;
     
     // 设置路径属性
     path.setAttribute('d', d);
-    path.setAttribute('fill', 'rgba(255, 246, 160, 0.7)'); // 淡黄色半透明
+    path.setAttribute('fill', 'rgba(255, 246, 160, 0.7)');
     path.setAttribute('stroke', '#e0d782');
     path.setAttribute('stroke-width', '1.5');
     
@@ -54,103 +47,12 @@
     svg.appendChild(path);
   }
   
-  // 计算三角形最优连接点（找到每个框最合适的边缘点）
-  function calculateOptimalConnectionPoints() {
-    // 准确计算框之间的连接点
-    const getOptimalPoint = (from, to1, to2) => {
-      // 获取当前框的位置信息
-      const box = boxPositions[from];
-      if (!box || !box.position) return { x: 0, y: 0 }; // 默认值
-      
-      // 计算三个框的质心
-      const allCenters = [
-        boxPositions.shengsheng.center,
-        boxPositions.duikang.center,
-        boxPositions.yu.center
-      ];
-      
-      const centroid = {
-        x: (allCenters[0].x + allCenters[1].x + allCenters[2].x) / 3,
-        y: (allCenters[0].y + allCenters[1].y + allCenters[2].y) / 3
-      };
-      
-      // 根据框的位置相对于质心的方向，确定连接点
-      // 这个算法会使连接点位于框的外边缘
-      const { x, y, width, height } = box.position;
-      const centerX = x + width / 2;
-      const centerY = y + height / 2;
-      
-      // 计算框中心到质心的向量
-      const dx = centroid.x - centerX;
-      const dy = centroid.y - centerY;
-      
-      // 根据框到质心的方向确定边缘上的点
-      // 选择一个最接近方向向量的点
-      let connX, connY;
-      
-      // 计算方向向量的角度
-      const angle = Math.atan2(dy, dx);
-      const PI = Math.PI;
-      
-      // 根据角度选择适当的边缘点
-      // 将圆周划分为8个部分，选择最接近的边缘
-      if (angle > -PI/8 && angle <= PI/8) {
-        // 右
-        connX = x + width;
-        connY = y + height/2;
-      } else if (angle > PI/8 && angle <= 3*PI/8) {
-        // 右下
-        connX = x + width;
-        connY = y + height;
-      } else if (angle > 3*PI/8 && angle <= 5*PI/8) {
-        // 下
-        connX = x + width/2;
-        connY = y + height;
-      } else if (angle > 5*PI/8 && angle <= 7*PI/8) {
-        // 左下
-        connX = x;
-        connY = y + height;
-      } else if ((angle > 7*PI/8 && angle <= PI) || (angle <= -7*PI/8 && angle > -PI)) {
-        // 左
-        connX = x;
-        connY = y + height/2;
-      } else if (angle > -7*PI/8 && angle <= -5*PI/8) {
-        // 左上
-        connX = x;
-        connY = y;
-      } else if (angle > -5*PI/8 && angle <= -3*PI/8) {
-        // 上
-        connX = x + width/2;
-        connY = y;
-      } else {
-        // 右上
-        connX = x + width;
-        connY = y;
-      }
-      
-      return { x: connX, y: connY };
-    };
-    
-    // 计算每个框的最佳连接点
-    return {
-      shengsheng: getOptimalPoint('shengsheng', 'duikang', 'yu'),
-      duikang: getOptimalPoint('duikang', 'shengsheng', 'yu'),
-      yu: getOptimalPoint('yu', 'shengsheng', 'duikang')
-    };
-  }
+  // 不再使用复杂连接点算法，直接连接中心点
   
-  // 处理框移动事件
+  // 处理框移动事件：计算中心点并更新位置
   function handleBoxMove(event) {
-    // 获取完整的位置数据
-    const { id, center, edges, edgeCenters, position, width, height } = event.detail;
-    boxPositions[id] = {
-      center,
-      edges,
-      edgeCenters,
-      position,
-      width,
-      height
-    };
+    const { id, x, y, width, height } = event.detail;
+    boxPositions[id] = { x: x + width / 2, y: y + height / 2 };
     updateTriangle();
   }
 
