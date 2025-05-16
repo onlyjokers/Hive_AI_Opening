@@ -1,8 +1,9 @@
 <script lang="ts">
   import DraggableBox from './DraggableBox.svelte';
   import { onMount } from 'svelte';
-  import './styles.css';
+import './styles.css';
   import { gsap } from 'gsap';
+import { fade } from 'svelte/transition';
 
   let windowWidth = 0;
   let windowHeight = 0;
@@ -51,12 +52,12 @@
     return lower.concat(upper);
   }
 
-  // 生成SVG路径字符串
+  // 生成SVG路径字符串，仅对已显现的盒子计算凸包
   $: hullPath = (() => {
-    // 只有当所有框都有数据时才计算凸包
-    if (!boxes.every(b => boxData[b.id])) return '';
+    const visibleBoxes = boxes.filter(b => boxStates[b.id].visible);
+    if (visibleBoxes.length < 2) return '';
     const pts: { x: number; y: number }[] = [];
-    for (const b of boxes) {
+    for (const b of visibleBoxes) {
       const d = boxData[b.id];
       if (d && !isNaN(d.x) && !isNaN(d.y)) {
         // 计算四个角的坐标
@@ -139,38 +140,28 @@
     "}"
   ]; 
   
-  // 构建包含盒子文本的行序列
-  const staticLines: Array<{ type: 'code' | 'box'; id?: string; text: string }> = [
-    ...codeLines.slice(0, 4).map(text => ({ type: 'code', text })),
-    { type: 'box', id: 'works', text: boxes.find(b => b.id==='works').text },
-    ...codeLines.slice(4, 7).map(text => ({ type: 'code', text })),
-    { type: 'box', id: 'name', text: boxes.find(b => b.id==='name').text },
-    ...codeLines.slice(7, 9).map(text => ({ type: 'code', text })),
-    { type: 'box', id: 'type', text: boxes.find(b => b.id==='type').text },
-    ...codeLines.slice(9, 13).map(text => ({ type: 'code', text })),
-    { type: 'box', id: 'time', text: boxes.find(b => b.id==='time').text },
-    ...codeLines.slice(13, 17).map(text => ({ type: 'code', text })),
-    { type: 'box', id: 'duration', text: boxes.find(b => b.id==='duration').text },
-    ...codeLines.slice(17).map(text => ({ type: 'code', text })),
-  ];
-
-  // 生成额外的代码行以确保有足够的内容滚动
-  const extraLines = Array(20).fill(0).map((_, i) => 
-    ({ type: 'code', text: `// 额外代码行 ${i+1}` })
-  );
-  
-  // 合并所有行并确保有足够的内容
-  const allLines = [...extraLines, ...staticLines, ...extraLines];
+  // 构造带动态插入盒子文本的行序列
+  // 先将所有 codeLines 转为 code 类型行
+  let staticLines: Array<{ type: 'code' | 'box'; id?: string; text: string }> = codeLines.map(text => ({ type: 'code', text }));
+  // 随机将 boxes 插入到 staticLines 中
+  boxes.forEach(b => {
+    const idx = Math.floor(Math.random() * (staticLines.length + 1));
+    staticLines.splice(idx, 0, { type: 'box', id: b.id, text: b.text });
+  });
+  // 为确保足够滚动内容，可在前后各加 10 行空白注释
+  const padLines = Array(10).fill({ type: 'code', text: '' });
+  staticLines = [...padLines, ...staticLines, ...padLines];
 
   let codeDiv: HTMLDivElement;
   let linesContainer: HTMLDivElement;
   // 为每行代码元素准备引用数组
-  let lineRefs: Array<HTMLDivElement> = Array(staticLines.length).fill(null);
+  let lineRefs: Array<HTMLDivElement> = Array(staticLines.length);
   // 记录每个盒子的显示状态与初始位置
   let boxStates = {} as Record<string, { visible: boolean; initialX: number; initialY: number }>;
   for (const b of boxes) {
     boxStates[b.id] = { visible: false, initialX: 0, initialY: 0 };
   }
+  
   onMount(() => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
@@ -181,7 +172,8 @@
         linesContainer,
         { y: viewH },
         {
-          y: -fullH,
+          // 滚动到内容底部与视口底对齐时停止：y = viewH - fullH
+          y: viewH - fullH,
           duration: 30,
           ease: 'none',
           onUpdate: () => {
@@ -243,7 +235,7 @@
   <!-- 创建连接三个框形成三角形的容器 -->
   <div class="triangle-container">
     <!-- 凸包多边形包裹效果 -->
-    <svg class="triangle-svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+  <svg class="triangle-svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
       <path
         d={hullPath}
         fill="rgba(255, 246, 160, 0.25)"
@@ -255,14 +247,16 @@
     <!-- 可拖拽的框 - 根据滚动触发显示 -->
     {#each boxes as b}
       {#if boxStates[b.id].visible}
-        <DraggableBox
-          id={b.id}
-          text={b.text}
-          initialX={boxStates[b.id].initialX}
-          initialY={boxStates[b.id].initialY}
-          rotation={b.rotation}
-          on:move={handleBoxMove}
-        />
+        <div in:fade={{ duration: 200 }}>  <!-- wrapper for fade transition -->
+          <DraggableBox
+            id={b.id}
+            text={b.text}
+            initialX={boxStates[b.id].initialX}
+            initialY={boxStates[b.id].initialY}
+            rotation={b.rotation}
+            on:move={handleBoxMove}
+          />
+        </div>
       {/if}
     {/each}
   </div>
