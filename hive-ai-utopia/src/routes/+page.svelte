@@ -6,55 +6,86 @@
   let windowWidth = 0;
   let windowHeight = 0;
 
-  // 三个框的中心点位置数据，初始化为组件的初始位置中心
-  let boxPositions = {
-    shengsheng: { x: 150 + 120 / 2, y: 450 + 100 / 2 },
-    duikang:   { x: 500 + 120 / 2, y: 200 + 100 / 2 },
-    yu:        { x: 350 +  80 / 2, y: 400 +  80 / 2 }
-  };
-
-  // 更新三角形连线
-  function updateTriangle() {
-    const svg = document.querySelector('.triangle-svg');
-    if (!svg) return;
-
-    // 清空现有的路径
-    while (svg.firstChild) {
-      svg.removeChild(svg.firstChild);
-    }
-
-    // 检查是否有足够的中心点数据来绘制三角形
-    if (!boxPositions.shengsheng.x || !boxPositions.shengsheng.y ||
-        !boxPositions.duikang.x || !boxPositions.duikang.y ||
-        !boxPositions.yu.x || !boxPositions.yu.y) {
-      return;
-    }
-
-    // 使用中心点直接绘制三角形路径
-    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    const d = `M ${boxPositions.shengsheng.x} ${boxPositions.shengsheng.y}
-L ${boxPositions.duikang.x} ${boxPositions.duikang.y}
-L ${boxPositions.yu.x} ${boxPositions.yu.y}
-Z`;
-    
-    // 设置路径属性
-    path.setAttribute('d', d);
-    path.setAttribute('fill', 'rgba(255, 246, 160, 0.7)');
-    path.setAttribute('stroke', '#e0d782');
-    path.setAttribute('stroke-width', '1.5');
-    
-    // 添加路径到SVG
-    svg.appendChild(path);
+  // 定义可拖拽框的配置数组
+  const boxes = [
+    { id: 'shengsheng', text: '共生', initialX: 150, initialY: 450, width: 120, height: 100, rotation: 0 },
+    { id: 'duikang',   text: '对抗', initialX: 500, initialY: 200, width: 120, height: 100, rotation: 10 },
+    { id: 'yu',        text: '与',   initialX: 350, initialY: 400, width:  80, height:  80, rotation: 0 }
+  ];
+  // 存储每个框的最新状态，用于计算包裹轮廓
+  let boxData = {} as Record<string, { x: number; y: number; width: number; height: number; rotation: number }>;
+  // 初始化boxData默认值，避免NaN
+  for (const b of boxes) {
+    boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
   }
-  
-  // 不再使用复杂连接点算法，直接连接中心点
-  
-  // 处理框移动事件：计算中心点并更新位置
+  // 初始化 boxData，确保初始值存在
+  for (const b of boxes) {
+    boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
+  }
+
+  // 初始化 boxData 的默认值，避免 NaN
+  for (const b of boxes) {
+    boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
+  }
+  // 处理框移动事件，更新boxData
   function handleBoxMove(event) {
-    const { id, x, y, width, height } = event.detail;
-    boxPositions[id] = { x: x + width / 2, y: y + height / 2 };
-    updateTriangle();
+    const { id, x, y, width, height, rotation } = event.detail;
+    boxData[id] = { x, y, width, height, rotation };
   }
+
+  // 计算多边形凸包（Monotone Chain算法）
+  function convexHull(points: { x: number; y: number }[]) {
+    if (points.length <= 1) return points;
+    const sorted = points.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [];
+    for (const p of sorted) {
+      while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper = [];
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const p = sorted[i];
+      while (upper.length >= 2 && cross(upper[upper.length-2], upper[upper.length-1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    upper.pop(); lower.pop();
+    return lower.concat(upper);
+  }
+
+  // 生成SVG路径字符串
+  $: hullPath = (() => {
+    // 只有当所有框都有数据时才计算凸包
+    if (!boxes.every(b => boxData[b.id])) return '';
+    const pts: { x: number; y: number }[] = [];
+    for (const b of boxes) {
+      const d = boxData[b.id];
+      if (d && !isNaN(d.x) && !isNaN(d.y)) {
+        // 计算四个角的坐标
+        const rad = d.rotation * Math.PI / 180;
+        const cx = d.x + d.width / 2;
+        const cy = d.y + d.height / 2;
+        const hw = d.width / 2;
+        const hh = d.height / 2;
+        const corners = [
+          { dx: -hw, dy: -hh },
+          { dx: hw, dy: -hh },
+          { dx: hw, dy: hh },
+          { dx: -hw, dy: hh }
+        ];
+        for (const { dx, dy } of corners) {
+          const x = cx + dx * Math.cos(rad) - dy * Math.sin(rad);
+          const y = cy + dx * Math.sin(rad) + dy * Math.cos(rad);
+          pts.push({ x, y });
+        }
+      }
+    }
+    const hull = convexHull(pts);
+    if (hull.length === 0) return '';
+    return 'M ' + hull.map(p => `${p.x} ${p.y}`).join(' L ') + ' Z';
+  })();
+
+  // （保留单一handleBoxMove，已在上方定义）
 
   // 背景代码
   const codeSnippets = [
@@ -89,9 +120,10 @@ Z`;
   onMount(() => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
-    
-    // 初始化三角形
-    setTimeout(updateTriangle, 100);
+    // 初始化 boxData 为初始框配置
+    for (const b of boxes) {
+      boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
+    }
   });
 </script>
 
@@ -108,9 +140,14 @@ Z`;
 <main>
   <!-- 创建连接三个框形成三角形的容器 -->
   <div class="triangle-container">
-    <!-- 三角形连线 -->
+    <!-- 凸包多边形包裹效果 -->
     <svg class="triangle-svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <!-- 三角形将在JS中动态绘制 -->
+      <path
+        d={hullPath}
+        fill="rgba(255,246,160,0.7)"
+        stroke="#e0d782"
+        stroke-width="1.5"
+      />
     </svg>
     
     <!-- 可拖拽的框 - 放在三角形的位置上模拟图片中的布局 -->

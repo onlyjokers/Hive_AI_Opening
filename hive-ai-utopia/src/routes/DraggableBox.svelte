@@ -18,12 +18,14 @@
   
   // 当位置改变时发送事件，包含左上角坐标及大小
   $: {
+    // 当位置或大小改变时发送事件，包括旋转属性
     dispatch('move', {
       id,
       x,
       y,
       width,
-      height
+      height,
+      rotation
     });
   }
 
