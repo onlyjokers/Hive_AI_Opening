@@ -2,6 +2,7 @@
   import DraggableBox from './DraggableBox.svelte';
   import { onMount } from 'svelte';
   import './styles.css';
+  import { gsap } from 'gsap';
 
   let windowWidth = 0;
   let windowHeight = 0;
@@ -105,6 +106,32 @@
     "  }",
     "  return 和谐;",
     "  共生 += random(-0.1, 0.1);",
+    "}",
+    "共生 += random(-0.1, 0.1);",
+    "class 生态系统 {",
+    "  共生 += random(-0.1, 0.1);",
+    "  this.共生 = 0.5;",
+    "  this.共生 = 0.5;",
+    "  let 平衡 = 共生 * 对抗;",
+    "  constructor() {",
+    "    关系.push(new 关系模型());",
+    "  }",
+    "  for (let i = 0; i < 3; i++) {",
+    "    对抗 += random(-0.1, 0.1);",
+    "  }",
+    "  function 对抗与共生() {",
+    "    class 生态系统 {",
+    "      关系.push(new 关系模型());",
+    "    }",
+    "  }",
+    "  function 更新状态() {",
+    "    this.共生 = 0.5;",
+    "    return 和谐;",
+    "    constructor() {",
+    "    }",
+    "  }",
+    "  return 和谐;",
+    "  共生 += random(-0.1, 0.1);",
     "}"
   ];
 
@@ -112,9 +139,16 @@
   onMount(() => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
-    // 将代码背景滚动到底部
+    // 使用 GSAP 逐行向下滚动代码背景
     if (codeDiv) {
-      codeDiv.scrollTop = codeDiv.scrollHeight;
+      // 从顶部开始
+      codeDiv.scrollTop = 0;
+      gsap.to(codeDiv, {
+        scrollTop: codeDiv.scrollHeight,
+        duration: 30,
+        ease: 'none',
+        repeat: -1
+      });
     }
   });
 </script>
