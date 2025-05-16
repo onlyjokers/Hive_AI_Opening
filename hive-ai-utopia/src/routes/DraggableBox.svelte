@@ -4,8 +4,10 @@
   export let text: string;
   export let initialX: number;
   export let initialY: number;
-  export let width: number = 100;
-  export let height: number = 100;
+  // 自动测量宽高，不再由外部传入
+  let boxDiv: HTMLDivElement;
+  let width: number = 0;
+  let height: number = 0;
   export let rotation: number = 0;
   export let id: string;
 
@@ -27,6 +29,15 @@
       height,
       rotation
     });
+  }
+  // 自动测量元素尺寸
+  $: if (boxDiv) {
+    const newW = boxDiv.offsetWidth;
+    const newH = boxDiv.offsetHeight;
+    if (newW !== width || newH !== height) {
+      width = newW;
+      height = newH;
+    }
   }
 
   function handleMouseDown(event: MouseEvent) {
@@ -52,11 +63,10 @@
 
 <div
   class="draggable-box"
+  bind:this={boxDiv}
   style="
     left: {x}px;
     top: {y}px;
-    width: {width}px;
-    height: {height}px;
     transform: rotate({rotation}deg);
   "
   on:mousedown={handleMouseDown}

@@ -6,26 +6,17 @@
   let windowWidth = 0;
   let windowHeight = 0;
 
-  // 定义可拖拽框的配置数组
+  // 定义可拖拽框的配置数组，支持动态增删
   const boxes = [
-    { id: 'shengsheng', text: '共生', initialX: 150, initialY: 450, width: 120, height: 100, rotation: 0 },
-    { id: 'duikang',   text: '对抗', initialX: 500, initialY: 200, width: 120, height: 100, rotation: 10 },
-    { id: 'yu',        text: '与',   initialX: 350, initialY: 400, width:  80, height:  80, rotation: 0 }
+    { id: 'shengsheng', text: '共生', initialX: 150, initialY: 450, rotation: 0 },
+    { id: 'duikang',   text: '对抗', initialX: 500, initialY: 200, rotation: 0 },
+    { id: 'yu',        text: '与',   initialX: 350, initialY: 400, rotation: 0 },
+    { id: 'ni',        text: '你',   initialX: 30,  initialY: 400, rotation: 0 }
   ];
-  // 存储每个框的最新状态，用于计算包裹轮廓
+  // 存储每个框的最新状态，用于计算包裹轮廓，默认尺寸为0
   let boxData = {} as Record<string, { x: number; y: number; width: number; height: number; rotation: number }>;
-  // 初始化boxData默认值，避免NaN
   for (const b of boxes) {
-    boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
-  }
-  // 初始化 boxData，确保初始值存在
-  for (const b of boxes) {
-    boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
-  }
-
-  // 初始化 boxData 的默认值，避免 NaN
-  for (const b of boxes) {
-    boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
+    boxData[b.id] = { x: b.initialX, y: b.initialY, width: 0, height: 0, rotation: b.rotation };
   }
   // 处理框移动事件，更新boxData
   function handleBoxMove(event) {
@@ -117,12 +108,13 @@
     "}"
   ];
 
+  let codeDiv: HTMLDivElement;
   onMount(() => {
     windowWidth = window.innerWidth;
     windowHeight = window.innerHeight;
-    // 初始化 boxData 为初始框配置
-    for (const b of boxes) {
-      boxData[b.id] = { x: b.initialX, y: b.initialY, width: b.width, height: b.height, rotation: b.rotation };
+    // 将代码背景滚动到底部
+    if (codeDiv) {
+      codeDiv.scrollTop = codeDiv.scrollHeight;
     }
   });
 </script>
@@ -130,7 +122,7 @@
 <svelte:window bind:innerWidth={windowWidth} bind:innerHeight={windowHeight} />
 
 <!-- 代码背景 -->
-<div class="code-background">
+<div bind:this={codeDiv} class="code-background">
   {#each codeSnippets as snippet}
     {snippet}
     <br>
@@ -150,35 +142,17 @@
       />
     </svg>
     
-    <!-- 可拖拽的框 - 放在三角形的位置上模拟图片中的布局 -->
-    <DraggableBox 
-      id="shengsheng" 
-      text="共生" 
-      initialX={150} 
-      initialY={450} 
-      width={120} 
-      height={100} 
-      on:move={handleBoxMove} 
-    />
-    <DraggableBox 
-      id="duikang" 
-      text="对抗" 
-      initialX={500} 
-      initialY={200} 
-      width={120} 
-      height={100} 
-      rotation={10}
-      on:move={handleBoxMove} 
-    />
-    <DraggableBox 
-      id="yu" 
-      text="与" 
-      initialX={350} 
-      initialY={400} 
-      width={80} 
-      height={80}
-      on:move={handleBoxMove} 
-    />
+    <!-- 可拖拽的框 - 动态渲染所有框 -->
+    {#each boxes as b}
+      <DraggableBox
+        id={b.id}
+        text={b.text}
+        initialX={b.initialX}
+        initialY={b.initialY}
+        rotation={b.rotation}
+        on:move={handleBoxMove}
+      />
+    {/each}
   </div>
 </main>
 
