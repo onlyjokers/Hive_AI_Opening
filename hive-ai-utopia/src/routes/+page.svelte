@@ -240,6 +240,18 @@
           rebuildStaticLines();
         }
       }
+      
+      // 检查是否需要录制视频
+      const shouldRecord = localStorage.getItem('hive-ai-should-record');
+      if (shouldRecord === 'true') {
+        // 立即移除标记，防止页面刷新时重新录制
+        localStorage.removeItem('hive-ai-should-record');
+        
+        // 延迟一小段时间后开始录制，等待页面完全渲染
+        setTimeout(() => {
+          startScreenRecording();
+        }, 500);
+      }
     } catch (e) {
       console.error('加载自定义盒子数据时出错:', e);
     }
@@ -406,6 +418,73 @@
     // 最后一个盒子固定位置
     const lastIdx = staticLines.length - padCount - 1;
     staticLines.splice(lastIdx, 0, { type: 'box', id: boxes[boxes.length - 1].id, text: boxes[boxes.length - 1].text });
+  }
+
+  // 视频录制相关变量
+  let mediaRecorder: MediaRecorder | null = null;
+  let recordedChunks: BlobPart[] = [];
+  
+  // 开始屏幕录制的函数
+  async function startScreenRecording() {
+    try {
+      // 调整窗口大小
+      window.resizeTo(1728, 832);
+      
+      // 获取屏幕共享
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { width: 1728, height: 832 },
+        audio: false
+      });
+      
+      // 创建 MediaRecorder 对象
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      
+      // 收集录制的数据
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+      
+      // 录制结束后下载视频
+      mediaRecorder.onstop = () => {
+        // 创建视频 Blob
+        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        
+        // 创建下载链接
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        document.body.appendChild(a);
+        a.style.display = 'none';
+        a.href = url;
+        a.download = '蜂巢AI理想国_' + new Date().toISOString() + '.webm';
+        a.click();
+        
+        // 清理
+        setTimeout(() => {
+          document.body.removeChild(a);
+          window.URL.revokeObjectURL(url);
+          recordedChunks = [];
+        }, 100);
+      };
+      
+      // 开始录制
+      mediaRecorder.start();
+      
+      // 10秒后停止录制
+      setTimeout(() => {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+          mediaRecorder.stop();
+          
+          // 停止所有视频轨道
+          stream.getTracks().forEach(track => track.stop());
+        }
+      }, 10000);
+      
+    } catch (err) {
+      console.error('无法录制屏幕:', err);
+      alert('无法开始录制，请确保已授予屏幕共享权限。');
+    }
   }
 </script>
 
