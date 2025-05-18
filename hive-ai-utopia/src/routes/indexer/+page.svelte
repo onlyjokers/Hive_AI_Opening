@@ -83,17 +83,36 @@
   // 启动视频录制
   async function startRecording() {
     try {
-      // 设置要录制的窗口大小
+      // 进入全屏并调整窗口位置及大小，隐藏浏览器 UI
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+      // 将窗口移动至左上角并设置尺寸（宽×高）
+      window.moveTo(0, 0);
       window.resizeTo(1728, 832);
       
-      // 获取屏幕共享
+      // 获取屏幕共享：优先选择当前标签页和仅录制浏览器内容
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: 1728, height: 832 },
-        audio: false
+        video: {
+          width: { ideal: 1728 },
+          height: { ideal: 832 },
+          frameRate: 30,
+          // 尽量选择浏览器渲染内容
+          displaySurface: 'browser',
+          logicalSurface: true,
+          cursor: 'none'
+        },
+        audio: false,
+        // Chrome下优先选择当前标签页
+        preferCurrentTab: true
       });
+      // 录制开始后退出全屏，避免影响视觉
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      }
       
       // 创建 MediaRecorder 对象
-      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/mp4' });
       
       // 收集录制的数据
       mediaRecorder.ondataavailable = (event) => {
@@ -105,7 +124,7 @@
       // 录制结束后下载视频
       mediaRecorder.onstop = () => {
         // 创建视频 Blob
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
+        const blob = new Blob(recordedChunks, { type: 'video/mp4' });
         
         // 创建下载链接
         const url = URL.createObjectURL(blob);
@@ -113,7 +132,7 @@
         document.body.appendChild(a);
         a.style.display = 'none';
         a.href = url;
-        a.download = '蜂巢AI理想国_' + new Date().toISOString() + '.webm';
+        a.download = '蜂巢AI理想国_' + new Date().toISOString() + '.mp4';
         a.click();
         
         // 清理
