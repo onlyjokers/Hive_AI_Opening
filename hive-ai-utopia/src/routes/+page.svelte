@@ -441,17 +441,29 @@
   // 视频录制相关变量
   let mediaRecorder: MediaRecorder | null = null;
   let recordedChunks: BlobPart[] = [];
-  
-  // 开始屏幕录制的函数
+    // 开始屏幕录制的函数
   async function startScreenRecording() {
     try {
-      // 调整窗口大小
+      // 确保在开始录制前已经调整好窗口尺寸
+      window.moveTo(0, 0);
       window.resizeTo(1728, 832);
       
-      // 获取屏幕共享
+      // 延迟一点时间让窗口大小调整生效
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // 获取屏幕共享：指定明确的尺寸要求，不录制光标，指定为窗口屏幕区域
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { width: 1728, height: 832 },
-        audio: false
+        video: {
+          width: { exact: 1728 },
+          height: { exact: 832 },
+          frameRate: { ideal: 30 },
+          displaySurface: 'window',
+          logicalSurface: true,
+          cursor: 'never'
+        },
+        audio: false,
+        preferCurrentTab: true, // 在Chrome中优先选择当前标签页
+        selfBrowserSurface: 'include' // 包括浏览器自身
       });
       
       // 创建 MediaRecorder 对象

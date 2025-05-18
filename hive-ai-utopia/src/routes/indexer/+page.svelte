@@ -97,10 +97,10 @@
           width: { ideal: 1728 },
           height: { ideal: 832 },
           frameRate: 30,
-          // 尽量选择浏览器渲染内容
+          // 仅录制浏览器内容，不录制鼠标光标
           displaySurface: 'browser',
           logicalSurface: true,
-          cursor: 'none'
+          cursor: 'never'
         },
         audio: false,
         // Chrome下优先选择当前标签页
