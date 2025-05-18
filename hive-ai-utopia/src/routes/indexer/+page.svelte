@@ -150,28 +150,22 @@
     // 保存输入的文本
     localStorage.setItem('hive-ai-texts', inputText);
     localStorage.setItem('hive-ai-code', codeText);
-    
-    // 解析输入文本并保存为自定义盒子数据
+
+    // 解析输入文本并生成任意个数的盒子
     const texts = inputText.split(',').map(text => text.trim()).filter(text => text);
-    
+
     if (texts.length > 0) {
-      // 创建新的盒子数组
-      const newBoxes = defaultBoxes.map((box, index) => {
-        // 如果有对应索引的文本，则使用自定义文本；否则保留默认文本
-        return {
-          id: box.id,
-          text: index < texts.length ? texts[index] : box.text,
-          rotation: box.rotation
-        };
-      });
-      
-      // 保存新的盒子配置
+      // 动态生成盒子配置
+      const newBoxes = texts.map((text, index) => ({
+        id: `box${index}`,
+        text,
+        rotation: 0
+      }));
       localStorage.setItem('hive-ai-boxes', JSON.stringify(newBoxes));
     } else {
-      // 如果输入为空，则使用默认值
       localStorage.removeItem('hive-ai-boxes');
     }
-    
+
     // 判断是否需要录制
     if (shouldRecord) {
       // 记录录制选项，方便主页面使用

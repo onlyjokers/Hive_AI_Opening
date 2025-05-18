@@ -206,27 +206,39 @@
     boxScheduled[b.id] = false;
   }
 
+  // 初始化盒子状态
+  function initBoxStates() {
+    // 重新初始化 boxStates 和 boxScheduled
+    boxStates = {};
+    boxScheduled = {};
+    
+    // 为每个盒子设置初始状态
+    for (const b of boxes) {
+      boxStates[b.id] = { visible: false, initialX: 0, initialY: 0 };
+      boxScheduled[b.id] = false;
+    }
+    
+    // 重置可见顺序
+    visibleOrder = [];
+  }
+
   onMount(() => {
     // 尝试从本地存储加载自定义盒子数据
     try {
       // 首先检查是否有来自 indexer 的文本输入
       const savedTexts = localStorage.getItem('hive-ai-texts');
       if (savedTexts) {
-        const texts = savedTexts.split(',').map(text => text.trim()).filter(text => text);
+        const texts = savedTexts.split(',').map(t => t.trim()).filter(t => t);
         if (texts.length > 0) {
-          // 使用自定义文本更新盒子
-          boxes = defaultBoxes.map((box, index) => {
-            return {
-              id: box.id,
-              text: index < texts.length ? texts[index] : box.text,
-              rotation: box.rotation
-            };
-          });
-          // 更新存储的盒子配置
+          // 根据 texts 动态生成盒子
+          boxes = texts.map((text, idx) => ({
+            id: `box${idx}`,
+            text,
+            rotation: 0
+          }));
           localStorage.setItem('hive-ai-boxes', JSON.stringify(boxes));
-          // 重新初始化boxData
           initBoxData();
-          // 重新构建静态行
+          initBoxStates(); // 添加这一行初始化 boxStates
           rebuildStaticLines();
         }
       } else {
@@ -236,6 +248,7 @@
           boxes = JSON.parse(savedBoxes);
           // 重新初始化boxData
           initBoxData();
+          initBoxStates(); // 添加这一行初始化 boxStates
           // 重新构建静态行
           rebuildStaticLines();
         }
@@ -267,7 +280,7 @@
         {
           // 滚动到内容底部与视口底对齐时停止：y = viewH - fullH
           // y: viewH - fullH,
-          y: (viewH/1 - 80) - fullH,
+          y: (viewH/1 - 100) - fullH,
           duration: 8,
           ease: 'none',
           onUpdate: () => {
@@ -276,7 +289,12 @@
             
             // 遍历检测所有盒子类型行
             staticLines.forEach((line, idx) => {
-              if (line.type === 'box' && !boxStates[line.id].visible && !boxScheduled[line.id]) {
+              if (
+                line.type === 'box' &&
+                boxStates[line.id] &&                   // 确保已有该盒子状态
+                !boxStates[line.id].visible &&
+                !boxScheduled[line.id]
+              ) {
                 const lineEl = lineRefs[idx];
                 if (lineEl) {
                   const lineRect = lineEl.getBoundingClientRect();
@@ -538,7 +556,7 @@
   <!-- <a href="/indexer" class="edit-button">编辑文本</a> -->
 </main>
 
-<style>
+<style lang="css">
   /* 样式已移至styles.css */
 
   main {
