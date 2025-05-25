@@ -9,6 +9,9 @@
   let windowWidth = 0;
   let windowHeight = 0;
   let animationDone = false;
+  
+  // 是否使用固定尺寸（832H×1728W）
+  let useFixedSize = false;
 
   // 定义默认可拖拽框的配置数组
   const defaultBoxes = [
@@ -40,7 +43,7 @@
   initBoxData();
 
   // 处理框移动事件，更新boxData
-  function handleBoxMove(event) {
+  function handleBoxMove(event: CustomEvent) {
     const { id, x, y, width, height, rotation } = event.detail;
     boxData[id] = { x, y, width, height, rotation };
   }
@@ -49,7 +52,7 @@
   function convexHull(points: { x: number; y: number }[]) {
     if (points.length <= 1) return points;
     const sorted = points.slice().sort((a, b) => a.x === b.x ? a.y - b.y : a.x - b.x);
-    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const cross = (o: {x: number; y: number}, a: {x: number; y: number}, b: {x: number; y: number}) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
     const lower = [];
     for (const p of sorted) {
       while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], p) <= 0) lower.pop();
@@ -70,13 +73,30 @@
     const visibleBoxes = boxes.filter(b => boxStates[b.id]?.visible);
     if (visibleBoxes.length < 2) return '';
     const pts: { x: number; y: number }[] = [];
+    
     for (const b of visibleBoxes) {
       const d = boxData[b.id];
       if (d && !isNaN(d.x) && !isNaN(d.y)) {
+        // 在固定尺寸模式下，需要转换坐标系统
+        let baseX = d.x;
+        let baseY = d.y;
+        
+        if (useFixedSize && typeof document !== 'undefined') {
+          const container = document.querySelector('.app-container');
+          const triangle = document.querySelector('.triangle-container');
+          if (container && triangle) {
+            const containerRect = container.getBoundingClientRect();
+            const triangleRect = triangle.getBoundingClientRect();
+            // 将全局坐标转换为相对于triangle-container的坐标
+            baseX = d.x - triangleRect.left;
+            baseY = d.y - triangleRect.top;
+          }
+        }
+        
         // 计算四个角的坐标
         const rad = d.rotation * Math.PI / 180;
-        const cx = d.x + d.width / 2;
-        const cy = d.y + d.height / 2;
+        const cx = baseX + d.width / 2;
+        const cy = baseY + d.height / 2;
         const hw = d.width / 2;
         const hh = d.height / 2;
         const corners = [
@@ -223,6 +243,32 @@
   }
 
   onMount(() => {
+    // 如果是测试模式，立即应用fixed-size-mode
+    if (useFixedSize) {
+      document.body.classList.add('fixed-size-mode');
+      console.log('Test mode: Applied fixed-size-mode class');
+    }
+    
+    // 添加调试信息：代码背景元素状态
+    console.log('Code background element:', codeDiv);
+    console.log('Lines container element:', linesContainer);
+    console.log('Static lines count:', staticLines.length);
+    console.log('Static lines sample:', staticLines.slice(0, 5));
+    
+    // 延迟检查元素可见性
+    setTimeout(() => {
+      if (codeDiv) {
+        const computedStyle = window.getComputedStyle(codeDiv);
+        console.log('Code background computed styles:', {
+          display: computedStyle.display,
+          position: computedStyle.position,
+          zIndex: computedStyle.zIndex,
+          opacity: computedStyle.opacity,
+          visibility: computedStyle.visibility
+        });
+      }
+    }, 100);
+    
     // 尝试从本地存储加载自定义盒子数据
     try {
       // 首先检查是否有来自 indexer 的文本输入
@@ -256,14 +302,28 @@
       
       // 检查是否需要录制视频
       const shouldRecord = localStorage.getItem('hive-ai-should-record');
+      console.log('shouldRecord from localStorage:', shouldRecord);
+      
       if (shouldRecord === 'true') {
+        console.log('启用固定尺寸模式');
+        
         // 立即移除标记，防止页面刷新时重新录制
         localStorage.removeItem('hive-ai-should-record');
+        
+        // 设置使用固定尺寸
+        useFixedSize = true;
+        console.log('useFixedSize set to:', useFixedSize);
+        
+        // 添加body class
+        document.body.classList.add('fixed-size-mode');
+        console.log('Added fixed-size-mode class to body');
         
         // 延迟一小段时间后开始录制，等待页面完全渲染
         setTimeout(() => {
           startScreenRecording();
         }, 500);
+      } else {
+        console.log('未启用录制模式');
       }
     } catch (e) {
       console.error('加载自定义盒子数据时出错:', e);
@@ -280,7 +340,7 @@
         {
           // 滚动到内容底部与视口底对齐时停止：y = viewH - fullH
           // y: viewH - fullH,
-          y: (viewH/1 - 100) - fullH,
+          y: (viewH/1 - (boxes.length * 19)) - fullH,
           duration: 8,
           ease: 'none',
           onUpdate: () => {
@@ -291,6 +351,7 @@
             staticLines.forEach((line, idx) => {
               if (
                 line.type === 'box' &&
+                line.id &&                               // 确保有id
                 boxStates[line.id] &&                   // 确保已有该盒子状态
                 !boxStates[line.id].visible &&
                 !boxScheduled[line.id]
@@ -306,11 +367,13 @@
                     setTimeout(() => {
                       const showBox = () => {
                         const pos = lineEl.getBoundingClientRect();
-                        boxStates[line.id] = {
-                          visible: true,
-                          initialX: pos.left,
-                          initialY: pos.top
-                        };
+                        if (line.id) {
+                          boxStates[line.id] = {
+                            visible: true,
+                            initialX: pos.left,
+                            initialY: pos.top
+                          };
+                        }
                       };
                       if (line.id === lastId) {
                         // 等待其它盒子可见后再显示
@@ -367,7 +430,7 @@
         // 目标id列表
         const targets = isLast ? visibleOrder.filter(id => id !== latest) : [...visibleOrder];
         // 定义最后布局时各盒子Y轴位置
-        const finalYs = [20, 100, 150, 200, 250];
+        const finalYs = [20, 100, 150, 200, 250, 300, 350, 400, 450, 500];
 
         targets.forEach(id => {
           const wrapper = wrapperRefs[id];
@@ -444,26 +507,14 @@
     // 开始屏幕录制的函数
   async function startScreenRecording() {
     try {
-      // 确保在开始录制前已经调整好窗口尺寸
-      window.moveTo(0, 0);
-      window.resizeTo(1728, 832);
-      
-      // 延迟一点时间让窗口大小调整生效
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // 获取屏幕共享：指定明确的尺寸要求，不录制光标，指定为窗口屏幕区域
+      // 获取屏幕共享
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
-          width: { exact: 1728 },
-          height: { exact: 832 },
-          frameRate: { ideal: 30 },
-          displaySurface: 'window',
-          logicalSurface: true,
-          cursor: 'never'
+          width: { ideal: 1728 },
+          height: { ideal: 832 },
+          frameRate: { ideal: 30 }
         },
-        audio: false,
-        preferCurrentTab: true, // 在Chrome中优先选择当前标签页
-        selfBrowserSurface: 'include' // 包括浏览器自身
+        audio: false
       });
       
       // 创建 MediaRecorder 对象
@@ -520,56 +571,115 @@
 
 <svelte:window bind:innerWidth={windowWidth} bind:innerHeight={windowHeight} />
 
-<!-- 代码背景 -->
-<div bind:this={codeDiv} class="code-background">
-  <div bind:this={linesContainer} class="lines-container">
-    {#each staticLines as line, i}
-      <div
-        use:captureLineRef={i}
-        class:selected={line.type === 'box'}
-      >
-        {line.text}
-      </div>
-    {/each}
-  </div>
-</div>
-
-<main>
-  <!-- 创建连接三个框形成三角形的容器 -->
-  <div class="triangle-container">
-    <!-- 凸包多边形包裹效果 -->
-  <svg class="triangle-svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-      <path
-        d={hullPath}
-        fill="rgba(255, 246, 160, 0.25)"
-        stroke="#e0d782"
-        stroke-width="1.5"
-      />
-    </svg>
-      
-    <!-- 可拖拽的框 - 根据滚动触发显示 -->
-    {#each boxes as b}
-      {#if boxStates[b.id].visible}
-        <div use:captureRef={b.id} in:fade={{ duration: 200 }}>
-          <DraggableBox
-            id={b.id}
-            text={b.text}
-            initialX={boxStates[b.id].initialX}
-            initialY={boxStates[b.id].initialY}
-            rotation={b.rotation}
-            on:move={handleBoxMove}
-          />
+<!-- 外层容器，根据useFixedSize控制尺寸 -->
+<div 
+  class="app-container" 
+  class:fixed-size={useFixedSize}
+  style={useFixedSize ? 'width: 1728px; height: 832px; border: 3px solid #e0d782; margin: 0 auto; overflow: hidden; position: relative; background-color: #000;' : ''}
+>
+  <!-- 代码背景 -->
+  <div bind:this={codeDiv} class="code-background">
+    <!-- 测试静态文本 -->
+    <div style="color: #ff0000; font-size: 20px; margin: 20px;">测试代码背景显示</div>
+    <div bind:this={linesContainer} class="lines-container">
+      {#each staticLines as line, i}
+        <div
+          use:captureLineRef={i}
+          class:selected={line.type === 'box'}
+        >
+          {line.text}
         </div>
-      {/if}
-    {/each}
+      {/each}
+    </div>
   </div>
-  
-  <!-- 返回编辑器按钮 -->
-  <!-- <a href="/indexer" class="edit-button">编辑文本</a> -->
-</main>
+
+  <main>
+    <!-- 创建连接三个框形成三角形的容器 -->
+    <div class="triangle-container">
+      <!-- 凸包多边形包裹效果 -->
+    <svg class="triangle-svg" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d={hullPath}
+          fill="rgba(255, 246, 160, 0.25)"
+          stroke="#e0d782"
+          stroke-width="1.5"
+        />
+      </svg>
+        
+      <!-- 可拖拽的框 - 根据滚动触发显示 -->
+      {#each boxes as b}
+        {#if boxStates[b.id].visible}
+          <div use:captureRef={b.id} in:fade={{ duration: 200 }}>
+            <DraggableBox
+              id={b.id}
+              text={b.text}
+              initialX={boxStates[b.id].initialX}
+              initialY={boxStates[b.id].initialY}
+              rotation={b.rotation}
+              on:move={handleBoxMove}
+            />
+          </div>
+        {/if}
+      {/each}
+    </div>
+    
+    <!-- 返回编辑器按钮 -->
+    <!-- <a href="/indexer" class="edit-button">编辑文本</a> -->
+    
+    <!-- 调试信息 -->
+    <div class="debug-info">
+      <p>useFixedSize: {useFixedSize}</p>
+      <p>容器类: {useFixedSize ? 'fixed-size' : 'normal'}</p>
+      {#if useFixedSize}
+        <p>固定尺寸: 1728×832</p>
+        <p>录制模式: 开启</p>
+      {:else}
+        <p>正常模式</p>
+      {/if}
+      <button on:click={() => useFixedSize = !useFixedSize}>
+        切换模式
+      </button>
+    </div>
+  </main>
+</div>
 
 <style lang="css">
   /* 样式已移至styles.css */
+
+  /* 外层容器 */
+  .app-container {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    background-color: #000;
+  }
+  
+  /* 固定尺寸模式：832H×1728W */
+  :global(.app-container.fixed-size) {
+    width: 1728px !important;
+    height: 832px !important;
+    max-width: 1728px !important;
+    max-height: 832px !important;
+    min-width: 1728px !important;
+    min-height: 832px !important;
+    margin: 0 auto !important;
+    border: 3px solid #e0d782 !important;
+    box-sizing: border-box !important;
+    background-color: #000 !important;
+    position: relative !important;
+    overflow: hidden !important;
+    display: block !important;
+  }
+  
+  /* 固定尺寸模式下的代码背景样式调整 */
+  .app-container.fixed-size :global(.code-background) {
+    position: absolute;
+    width: 1728px;
+    height: 832px;
+    z-index: 1 !important;
+    opacity: 0.4 !important;
+  }
 
   main {
     width: 100%;
@@ -578,6 +688,12 @@
     padding: 20px;
     box-sizing: border-box;
   }
+  
+  /* 固定尺寸模式下的main样式调整 */
+  .app-container.fixed-size main {
+    min-height: 832px;
+    height: 832px;
+  }
 
   .triangle-container {
     position: absolute;
@@ -585,7 +701,7 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 5;
+    z-index: 20;
     pointer-events: none;
   }
 
@@ -595,32 +711,26 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 1;
+    z-index: 21;
     pointer-events: none;
   }
   
   /* 确保DraggableBox可以被拖动 */
   .triangle-container :global(.draggable-box) {
     pointer-events: auto;
+    z-index: 22;
   }
   
-  /* 编辑按钮样式 */
-  .edit-button {
+  /* 调试信息样式 */
+  .debug-info {
     position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 8px 16px;
-    background-color: rgba(255, 246, 160, 0.15);
-    color: #e0d782;
-    border: 1px solid #e0d782;
-    border-radius: 4px;
-    text-decoration: none;
-    font-size: 14px;
-    transition: all 0.2s ease;
-    z-index: 100;
-  }
-  
-  .edit-button:hover {
-    background-color: rgba(255, 246, 160, 0.3);
+    top: 10px;
+    right: 10px;
+    background-color: rgba(224, 215, 130, 0.9);
+    color: #000;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    z-index: 1000;
   }
 </style>

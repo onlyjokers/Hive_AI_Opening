@@ -83,33 +83,15 @@
   // 启动视频录制
   async function startRecording() {
     try {
-      // 进入全屏并调整窗口位置及大小，隐藏浏览器 UI
-      if (document.documentElement.requestFullscreen) {
-        await document.documentElement.requestFullscreen();
-      }
-      // 将窗口移动至左上角并设置尺寸（宽×高）
-      window.moveTo(0, 0);
-      window.resizeTo(1728, 832);
-      
-      // 获取屏幕共享：优先选择当前标签页和仅录制浏览器内容
+      // 获取屏幕共享
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           width: { ideal: 1728 },
           height: { ideal: 832 },
-          frameRate: 30,
-          // 仅录制浏览器内容，不录制鼠标光标
-          displaySurface: 'browser',
-          logicalSurface: true,
-          cursor: 'never'
+          frameRate: 30
         },
-        audio: false,
-        // Chrome下优先选择当前标签页
-        preferCurrentTab: true
+        audio: false
       });
-      // 录制开始后退出全屏，避免影响视觉
-      if (document.fullscreenElement) {
-        await document.exitFullscreen();
-      }
       
       // 创建 MediaRecorder 对象
       mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/mp4' });
@@ -189,11 +171,13 @@
     if (shouldRecord) {
       // 记录录制选项，方便主页面使用
       localStorage.setItem('hive-ai-should-record', 'true');
+      console.log('已设置录制标记:', shouldRecord);
       
       // 启动录制（会包括跳转后的页面）
       await startRecording();
     } else {
       localStorage.removeItem('hive-ai-should-record');
+      console.log('未勾选录制选项');
     }
     
     // 跳转到主页面
@@ -252,6 +236,12 @@
       重置为默认内容
     </button>
     <button class="main-button" on:click={handleBuild}>构建</button>
+    <button class="reset-button" on:click={() => {
+      localStorage.setItem('hive-ai-should-record', 'true');
+      goto('/');
+    }}>
+      测试固定尺寸
+    </button>
   </div>
 </main>
 

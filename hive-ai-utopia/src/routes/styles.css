@@ -21,16 +21,26 @@ body {
   font-family: "SimSun", "宋体", serif;
   color: #fff;
   overflow-x: hidden;
+  min-height: 100vh;
+}
+
+/* 当使用固定尺寸时，body的样式调整 */
+body.fixed-size-mode {
+  background-color: #222;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
 }
 
 .code-background {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: -1;
-  opacity: 0.2;
+  z-index: 1;
+  opacity: 0.4;
   pointer-events: none;
   color: #cccccc;
   font-family: monospace;
@@ -39,6 +49,27 @@ body {
   padding: 20px;
   overflow: hidden;
   white-space: pre;
+  background-color: rgba(50, 50, 50, 0.1); /* 添加测试背景色 */
+}
+
+/* 固定尺寸模式下的代码背景调整 */
+body.fixed-size-mode .code-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  opacity: 0.4;
+  pointer-events: none;
+  color: #cccccc;
+  font-family: monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  padding: 20px;
+  overflow: hidden;
+  white-space: pre;
+  background-color: rgba(50, 50, 50, 0.2); /* 添加测试背景色 */
 }
 
 .lines-container {
