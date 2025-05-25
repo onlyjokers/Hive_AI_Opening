@@ -64,6 +64,8 @@ export let initialY: number = 0;
 <div
   class="draggable-box"
   bind:this={boxDiv}
+  role="button"
+  tabindex="0"
   style="
     left: {x}px;
     top: {y}px;

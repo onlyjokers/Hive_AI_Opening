@@ -1,6 +1,6 @@
 <script lang="ts">
   import DraggableBox from './DraggableBox.svelte';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import './styles.css';
   import { gsap } from 'gsap';
   import { fade } from 'svelte/transition';
@@ -82,14 +82,30 @@
         let baseY = d.y;
         
         if (useFixedSize && typeof document !== 'undefined') {
-          const container = document.querySelector('.app-container');
-          const triangle = document.querySelector('.triangle-container');
-          if (container && triangle) {
-            const containerRect = container.getBoundingClientRect();
-            const triangleRect = triangle.getBoundingClientRect();
-            // 将全局坐标转换为相对于triangle-container的坐标
-            baseX = d.x - triangleRect.left;
-            baseY = d.y - triangleRect.top;
+          // 在固定尺寸模式下，需要将viewport坐标转换为SVG坐标系
+          const triangleContainer = document.querySelector('.triangle-container');
+          const svg = document.querySelector('.triangle-svg');
+          
+          if (triangleContainer && svg) {
+            const containerRect = triangleContainer.getBoundingClientRect();
+            const svgRect = svg.getBoundingClientRect();
+            
+            // 将DraggableBox的viewport坐标转换为相对于SVG的坐标
+            baseX = d.x - svgRect.left;
+            baseY = d.y - svgRect.top;
+            
+            console.log('Fixed size coordinate conversion:', {
+              boxId: b.id,
+              original: { x: d.x, y: d.y },
+              containerRect: { left: containerRect.left, top: containerRect.top },
+              svgRect: { left: svgRect.left, top: svgRect.top },
+              converted: { x: baseX, y: baseY }
+            });
+          } else {
+            // 如果找不到容器元素，回退到直接使用坐标
+            baseX = d.x;
+            baseY = d.y;
+            console.log('Fixed size mode - fallback to direct coordinates');
           }
         }
         
@@ -334,14 +350,26 @@
     if (codeDiv && linesContainer) {
       const viewH = codeDiv.clientHeight;
       const fullH = linesContainer.scrollHeight;
+      
+      // 根据固定尺寸模式调整动画参数
+      const animationDuration = useFixedSize ? 4 : 8; // 固定尺寸模式下缩短动画时间
+      const boxDelay = useFixedSize ? 750 : 1500; // 固定尺寸模式下缩短盒子出现延迟
+      
+      console.log('Animation settings:', { 
+        useFixedSize, 
+        animationDuration, 
+        boxDelay, 
+        viewH, 
+        fullH 
+      });
+      
       gsap.fromTo(
         linesContainer,
         { y: viewH },
         {
           // 滚动到内容底部与视口底对齐时停止：y = viewH - fullH
-          // y: viewH - fullH,
-          y: (viewH/1 - (boxes.length * 19)) - fullH,
-          duration: 8,
+          y: (viewH/1 - (boxes.length * 35)) - fullH,
+          duration: animationDuration,
           ease: 'none',
           onUpdate: () => {
             // 检测视口区域
@@ -363,7 +391,6 @@
                   if (lineRect.top >= viewportRect.top && lineRect.bottom <= viewportRect.bottom) {
                     // 仅触发一次
                     boxScheduled[line.id] = true;
-                    const delay = 1500;
                     setTimeout(() => {
                       const showBox = () => {
                         const pos = lineEl.getBoundingClientRect();
@@ -390,7 +417,7 @@
                       } else {
                         showBox();
                       }
-                    }, delay);
+                    }, boxDelay);
                   }
                 }
               }
@@ -567,6 +594,122 @@
       alert('无法开始录制，请确保已授予屏幕共享权限。');
     }
   }
+
+  // 重新启动动画的函数
+  function restartAnimation() {
+    if (!codeDiv || !linesContainer) return;
+    
+    // 重置所有盒子状态
+    initBoxStates();
+    
+    // 停止当前动画
+    gsap.killTweensOf(linesContainer);
+    
+    // 重新计算视口和动画参数
+    const viewH = codeDiv.clientHeight;
+    const fullH = linesContainer.scrollHeight;
+    
+    // 根据固定尺寸模式调整动画参数
+    const animationDuration = useFixedSize ? 4 : 8;
+    const boxDelay = useFixedSize ? 750 : 1500;
+    
+    console.log('Restarting animation with settings:', { 
+      useFixedSize, 
+      animationDuration, 
+      boxDelay, 
+      viewH, 
+      fullH 
+    });
+    
+    // 重新启动动画
+    gsap.fromTo(
+      linesContainer,
+      { y: viewH },
+      {
+        y: (viewH/1 - (boxes.length * 35)) - fullH,
+        duration: animationDuration,
+        ease: 'none',
+        onUpdate: () => {
+          // 检测视口区域
+          const viewportRect = codeDiv.getBoundingClientRect();
+          
+          // 遍历检测所有盒子类型行
+          staticLines.forEach((line, idx) => {
+            if (
+              line.type === 'box' &&
+              line.id &&
+              boxStates[line.id] &&
+              !boxStates[line.id].visible &&
+              !boxScheduled[line.id]
+            ) {
+              const lineEl = lineRefs[idx];
+              if (lineEl) {
+                const lineRect = lineEl.getBoundingClientRect();
+                if (lineRect.top >= viewportRect.top && lineRect.bottom <= viewportRect.bottom) {
+                  boxScheduled[line.id] = true;
+                  setTimeout(() => {
+                    const showBox = () => {
+                      const pos = lineEl.getBoundingClientRect();
+                      if (line.id) {
+                        boxStates[line.id] = {
+                          visible: true,
+                          initialX: pos.left,
+                          initialY: pos.top
+                        };
+                      }
+                    };
+                    if (line.id === lastId) {
+                      if (boxes.filter(b => b.id !== lastId).every(b => boxStates[b.id].visible)) {
+                        showBox();
+                      } else {
+                        const checkInterval = setInterval(() => {
+                          if (boxes.filter(b => b.id !== lastId).every(b => boxStates[b.id].visible)) {
+                            showBox();
+                            clearInterval(checkInterval);
+                          }
+                        }, 100);
+                      }
+                    } else {
+                      showBox();
+                    }
+                  }, boxDelay);
+                }
+              }
+            }
+          });
+        }
+      }
+    );
+  }
+
+  // 监听useFixedSize变化，重新启动动画
+  $: if (typeof useFixedSize !== 'undefined') {
+    // 当useFixedSize变化时，更新body class
+    if (useFixedSize) {
+      document.body.classList.add('fixed-size-mode');
+    } else {
+      document.body.classList.remove('fixed-size-mode');
+    }
+    
+    // 延迟重新启动动画，等待DOM更新
+    setTimeout(() => {
+      restartAnimation();
+    }, 100);
+  }
+
+  // 组件销毁时清理动画和定时器
+  onDestroy(() => {
+    // 停止所有GSAP动画
+    gsap.killTweensOf("*");
+    
+    // 清除所有定时器（如果有全局引用的话）
+    // 注意：setTimeout 创建的定时器在组件销毁时会自动清理
+    
+    // 移除body类
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('fixed-size-mode');
+    }
+  });
 </script>
 
 <svelte:window bind:innerWidth={windowWidth} bind:innerHeight={windowHeight} />
@@ -633,12 +776,21 @@
       {#if useFixedSize}
         <p>固定尺寸: 1728×832</p>
         <p>录制模式: 开启</p>
+        <p>动画时长: 4秒</p>
+        <p>盒子延迟: 750ms</p>
       {:else}
         <p>正常模式</p>
+        <p>动画时长: 8秒</p>
+        <p>盒子延迟: 1500ms</p>
       {/if}
+      <p>可见盒子数: {boxes.filter(b => boxStates[b.id]?.visible).length}/{boxes.length}</p>
+      <p>凸包路径: {hullPath ? '已生成' : '未生成'}</p>
       <button on:click={() => useFixedSize = !useFixedSize}>
-        切换模式
+        切换模式 (会重启动画)
       </button>
+      <p style="font-size: 10px; margin-top: 5px;">
+        固定尺寸模式下动画加速，盒子出现更快
+      </p>
     </div>
   </main>
 </div>
